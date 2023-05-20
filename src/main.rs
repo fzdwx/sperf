@@ -1,4 +1,4 @@
-use std::{ffi::CString, os::raw::c_char};
+use std::{ffi::CString, os::raw::c_char, vec};
 
 use clap::Parser;
 use libc::execve;
@@ -24,22 +24,36 @@ impl Cli {
     }
 
     fn to_c_command(&self) {
-        let mut args = vec![
-            CString::new(self.command.as_str()).unwrap(),
-        ];
+        let prog = CString::new(self.command.as_str()).unwrap();
 
-        if let Some(self_args) = &self.args {
-            for arg in self_args {
-                args.push(CString::new(arg.as_str()).unwrap());
+        let mut args = match &self.args {
+            Some(args) => args
+                .iter()
+                .map(|arg| {
+                    return CString::new(arg.as_str()).unwrap();
+                })
+                .collect(),
+            None => {
+                vec![]
             }
-        }
+        };
+
+        args.insert(0, clean_prog(self.command.clone()));
 
         let argv: Vec<*const c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
         let envp: *const *const c_char = std::ptr::null();
 
         unsafe {
-            let rs = libc::execve(argv[0], argv.as_ptr(), envp);
+            let rs = libc::execve(prog.as_ptr(), argv.as_ptr(), envp);
             println!("rs: {}", rs);
         }
     }
+}
+
+fn clean_prog(command: String) -> CString {
+    let mut prog = command;
+    if prog.contains("/") {
+        prog = prog.split("/").last().unwrap().to_string();
+    }
+    CString::new(prog.as_str()).unwrap()
 }
