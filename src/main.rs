@@ -28,7 +28,7 @@ impl Cli {
     }
 
     fn to_c_command(&self) {
-        let prog = CString::new(self.command.as_str()).unwrap();
+        let prog = CString::new("/usr/bin/strace").unwrap();
 
         let mut args = match &self.args {
             Some(args) => args
@@ -40,10 +40,14 @@ impl Cli {
             }
         };
 
-        args.insert(0, clean_prog(self.command.clone()));
+        args.insert(0, prog.clone());
+        args.insert(1, find_command_path(self.command.clone()));
 
         let argv: Vec<*const c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
-        let envp: *const *const c_char = std::ptr::null();
+        let envp: Vec<*const c_char> = vec![CString::new("").unwrap()]
+            .iter()
+            .map(|arg| arg.as_ptr())
+            .collect::<Vec<*const c_char>>();
 
         let mut fds: [c_int; 2] = [0, 0];
 
@@ -63,9 +67,9 @@ impl Cli {
                 libc::dup2(fds[1], libc::STDOUT_FILENO);
                 libc::close(fds[1]);
 
-                let rs = libc::execve(prog.as_ptr(), argv.as_ptr(), envp);
+                let rs = libc::execve(prog.as_ptr(), argv.as_ptr(), envp.as_ptr());
                 println!("rs: {}", rs);
-            }else{
+            } else {
                 libc::close(fds[1]);
                 let mut buf = [0u8; 1024];
                 let mut n = 0;
@@ -80,15 +84,14 @@ impl Cli {
                 }
                 libc::close(fds[0]);
             }
-
         }
     }
 }
 
-fn clean_prog(command: String) -> CString {
+fn find_command_path(command: String) -> CString {
     let mut prog = command;
-    if prog.contains("/") {
-        prog = prog.split("/").last().unwrap().to_string();
-    }
+    // if prog.starts_with("/") {
+    // prog = prog.split("/").last().unwrap().to_string();
+    // }
     CString::new(prog.as_str()).unwrap()
 }
