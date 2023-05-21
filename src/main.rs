@@ -22,12 +22,6 @@ struct Cli {
 
 impl Cli {
     pub fn run(&self) {
-        println!("Command: {}", self.command);
-        println!("Args: {:?}", self.args);
-        self.to_c_command();
-    }
-
-    fn to_c_command(&self) {
         let prog = CString::new("/usr/bin/strace").unwrap();
 
         let mut args = match &self.args {
@@ -49,7 +43,7 @@ impl Cli {
             .map(|arg| arg.as_ptr())
             .collect::<Vec<*const c_char>>();
 
-        let mut fds: [c_int; 2] = [0, 0];
+        let mut fds: [c_int; 2] = [libc::STDERR_FILENO, libc::STDOUT_FILENO]; // 0 is read, 1 is write
 
         unsafe {
             if libc::pipe(fds.as_mut_ptr()) == -1 {
@@ -64,11 +58,12 @@ impl Cli {
             if pid == 0 {
                 // child
                 libc::close(fds[0]);
-                libc::dup2(fds[1], libc::STDOUT_FILENO);
+                libc::dup2(fds[1], libc::STDERR_FILENO);
                 libc::close(fds[1]);
 
-                let rs = libc::execve(prog.as_ptr(), argv.as_ptr(), envp.as_ptr());
-                println!("rs: {}", rs);
+                if libc::execve(prog.as_ptr(), argv.as_ptr(), envp.as_ptr()) == -1 {
+                    panic!("Failed to execve");
+                }
             } else {
                 libc::close(fds[1]);
                 let mut buf = [0u8; 1024];
@@ -90,8 +85,12 @@ impl Cli {
 
 fn find_command_path(command: String) -> CString {
     let mut prog = command;
-    // if prog.starts_with("/") {
-    // prog = prog.split("/").last().unwrap().to_string();
-    // }
+    if prog.starts_with("/") {
+        return wrap(prog);
+    }
+    CString::new(prog.as_str()).unwrap()
+}
+
+fn wrap(prog: String) -> CString {
     CString::new(prog.as_str()).unwrap()
 }
