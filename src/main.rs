@@ -34,14 +34,12 @@ impl Cli {
             }
         };
 
-        args.insert(0, prog.clone());
-        args.insert(1, find_command_path(self.command.clone()));
+        args.insert(0, CString::new("strace").unwrap());
+        args.insert(1, CString::new("-T").unwrap());
+        args.insert(2, find_command_path(self.command.clone()));
 
-        let argv: Vec<*const c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
-        let envp: Vec<*const c_char> = vec![CString::new("").unwrap()]
-            .iter()
-            .map(|arg| arg.as_ptr())
-            .collect::<Vec<*const c_char>>();
+        let mut argv: Vec<*const c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
+        argv.push(std::ptr::null());
 
         let mut fds: [c_int; 2] = [libc::STDERR_FILENO, libc::STDOUT_FILENO]; // 0 is read, 1 is write
 
@@ -61,7 +59,7 @@ impl Cli {
                 libc::dup2(fds[1], libc::STDERR_FILENO);
                 libc::close(fds[1]);
 
-                if libc::execve(prog.as_ptr(), argv.as_ptr(), envp.as_ptr()) == -1 {
+                if libc::execve(prog.as_ptr(), argv.as_ptr(), std::ptr::null()) == -1 {
                     panic!("Failed to execve");
                 }
             } else {
@@ -74,7 +72,7 @@ impl Cli {
                         break;
                     }
                     String::from_utf8_lossy(&buf).lines().for_each(|line| {
-                        println!("line: {}", line);
+                        println!("{}", line);
                     });
                 }
                 libc::close(fds[0]);
