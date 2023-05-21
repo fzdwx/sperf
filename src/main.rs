@@ -1,4 +1,8 @@
-use std::{ffi::CString, os::raw::c_char, vec};
+use std::{
+    ffi::CString,
+    os::raw::{c_char, c_int},
+    vec,
+};
 
 use clap::Parser;
 use libc::execve;
@@ -29,9 +33,7 @@ impl Cli {
         let mut args = match &self.args {
             Some(args) => args
                 .iter()
-                .map(|arg| {
-                    return CString::new(arg.as_str()).unwrap();
-                })
+                .map(|arg| CString::new(arg.as_str()).unwrap())
                 .collect(),
             None => {
                 vec![]
@@ -43,9 +45,42 @@ impl Cli {
         let argv: Vec<*const c_char> = args.iter().map(|arg| arg.as_ptr()).collect();
         let envp: *const *const c_char = std::ptr::null();
 
+        let mut fds: [c_int; 2] = [0, 0];
+
         unsafe {
-            let rs = libc::execve(prog.as_ptr(), argv.as_ptr(), envp);
-            println!("rs: {}", rs);
+            if libc::pipe(fds.as_mut_ptr()) == -1 {
+                panic!("Failed to create pipe");
+            }
+
+            let pid = libc::fork();
+            if pid == -1 {
+                panic!("Failed to fork");
+            }
+
+            if pid == 0 {
+                // child
+                libc::close(fds[0]);
+                libc::dup2(fds[1], libc::STDOUT_FILENO);
+                libc::close(fds[1]);
+
+                let rs = libc::execve(prog.as_ptr(), argv.as_ptr(), envp);
+                println!("rs: {}", rs);
+            }else{
+                libc::close(fds[1]);
+                let mut buf = [0u8; 1024];
+                let mut n = 0;
+                loop {
+                    n = libc::read(fds[0], buf.as_mut_ptr() as *mut libc::c_void, buf.len());
+                    if n == 0 {
+                        break;
+                    }
+                    String::from_utf8_lossy(&buf).lines().for_each(|line| {
+                        println!("line: {}", line);
+                    });
+                }
+                libc::close(fds[0]);
+            }
+
         }
     }
 }
