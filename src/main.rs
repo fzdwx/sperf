@@ -135,9 +135,7 @@ fn parse_line(text: &str) -> Option<Syscall> {
         }
         name.push(ch);
     }
-    if name == "read" {
-        println!("{}", text)
-    }
+
     let mut start = false;
     for (_, ch) in text.chars().enumerate() {
         if ch == '<' {
@@ -151,9 +149,11 @@ fn parse_line(text: &str) -> Option<Syscall> {
             time.push(ch);
         }
     }
+
     if name.is_empty() || time.is_empty() {
         return None;
     }
+
     Some(Syscall::new(name, time))
 }
 
@@ -180,8 +180,6 @@ impl Display for Syscall {
         write!(f, "{}", self.to_string())
     }
 }
-
-
 
 impl Syscall {
     fn new(name: String, cost: String) -> Self {
